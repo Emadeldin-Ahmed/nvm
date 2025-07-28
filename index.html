@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Walkie Chat</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: sans-serif; text-align: center; padding: 2em; }
+    #chat-section, #group-select, #message-controls { display: none; }
+  </style>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup, sendEmailVerification, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, doc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyCfNDXNnZx8z0DbBajnyy8lTqx9nlfqFUc",
+      authDomain: "web-based-walkie-talkie.firebaseapp.com",
+      projectId: "web-based-walkie-talkie",
+      storageBucket: "web-based-walkie-talkie.appspot.com",
+      messagingSenderId: "56057077696",
+      appId: "1:56057077696:web:eff62196c7b1ae5c6df225"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth();
+    const db = getFirestore();
+
+    const email = document.getElementById("email");
+    const password = document.getElementById("password");
+    const chatSection = document.getElementById("chat-section");
+    const userInfo = document.getElementById("user-info");
+    const roomSelector = document.getElementById("room-selector");
+    const chatBox = document.getElementById("chat-box");
+    const messageControls = document.getElementById("message-controls");
+    const prewrittenMsg = document.getElementById("prewritten-msg");
+
+    async function signUp() {
+      try {
+        const userCred = await createUserWithEmailAndPassword(auth, email.value, password.value);
+        await sendEmailVerification(userCred.user);
+        alert("Verification email sent! Please verify before using chat.");
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function signIn() {
+      try {
+        const userCred = await signInWithEmailAndPassword(auth, email.value, password.value);
+        if (!userCred.user.emailVerified) {
+          alert("Please verify your email before chatting.");
+          await sendEmailVerification(userCred.user);
+          return;
+        }
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function signInWithGoogle() {
+      try {
+        const provider = new GoogleAuthProvider();
+        await signInWithPopup(auth, provider);
+      } catch (e) {
+        alert(e.message);
+      }
+    }
+
+    async function resendVerification() {
+      const user = auth.currentUser;
+      if (user && !user.emailVerified) {
+        await sendEmailVerification(user);
+        alert("Verification email resent.");
+      } else {
+        alert("User not signed in or already verified.");
+      }
+    }
+
+    async function signOutUser() {
+      await signOut(auth);
+    }
+
+    async function sendMessage() {
+      const room = roomSelector.value;
+      if (!room) return;
+      const msg = prewrittenMsg.value;
+      await addDoc(collection(db, "rooms", room, "messages"), {
+        text: msg,
+        uid: auth.currentUser.uid,
+        email: auth.currentUser.email,
+        time: serverTimestamp()
+      });
+    }
+
+    function listenToRoom(room) {
+      chatBox.innerHTML = "";
+      const q = query(collection(db, "rooms", room, "messages"), orderBy("time"));
+      onSnapshot(q, (snap) => {
+        chatBox.innerHTML = "";
+        snap.forEach(doc => {
+          const data = doc.data();
+          const p = document.createElement("p");
+          p.textContent = `${data.email}: ${data.text}`;
+          chatBox.appendChild(p);
+        });
+      });
+    }
+
+    onAuthStateChanged(auth, (user) => {
+      if (user && (user.emailVerified || user.providerData[0]?.providerId === "google.com")) {
+        document.getElementById("auth-section").style.display = "none";
+        chatSection.style.display = "block";
+        userInfo.textContent = `Signed in as: ${user.email}`;
+        roomSelector.innerHTML = "<option value='general'>General</option><option value='group1'>Group 1</option><option value='group2'>Group 2</option>";
+        document.getElementById("group-select").style.display = "block";
+        messageControls.style.display = "block";
+        roomSelector.onchange = () => listenToRoom(roomSelector.value);
+        roomSelector.dispatchEvent(new Event("change"));
+      } else {
+        document.getElementById("auth-section").style.display = "block";
+        chatSection.style.display = "none";
+      }
+    });
+  </script>
+</head>
+<body>
+  <h1>📡 Walkie Chat</h1>
+  <div id="auth-section">
+    <h2>Login</h2>
+    <input type="email" id="email" placeholder="Email"><br>
+    <input type="password" id="password" placeholder="Password"><br>
+    <button onclick="signUp()">Sign Up</button>
+    <button onclick="signIn()">Sign In</button>
+    <button onclick="signInWithGoogle()">Google Sign In</button>
+    <button onclick="resendVerification()">Resend Verification Email</button>
+  </div>
+  <div id="chat-section">
+    <p id="user-info"></p>
+    <button onclick="signOutUser()">Sign Out</button>
+    <div id="group-select">
+      <select id="room-selector"></select>
+    </div>
+    <div id="chat-box" style="height: 300px; overflow-y: scroll; border: 1px solid #ccc; margin-top: 1em;"></div>
+    <div id="message-controls">
+      <select id="prewritten-msg">
+        <option value="hello">Hello</option>
+        <option value="omg">OMG</option>
+        <option value="...">...</option>
+      </select>
+      <button onclick="sendMessage()">Send</button>
+    </div>
+  </div>
+</body>
+</html>
